@@ -11,9 +11,7 @@ https://github.com/KanniShashankh/Hash-it-out-30/assets/63902267/28d5685f-155d-4
 ![](photos/trans.png)
 
 ## The following tests were done on CS50 (1.5 Hour length video) 
-### Multithreading  threading
-![](photos/single.png)
 ### Single threading
-![](photos/single.png)
-### Multithreading threading
 ![](photos/multi.png)
+### Multithreading threading
+![](photos/single.png)
