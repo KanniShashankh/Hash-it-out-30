@@ -3,20 +3,49 @@ from tkinter import ttk, filedialog, scrolledtext
 from googletrans import Translator
 import re
 import subprocess
+import concurrent.futures
+import multiprocessing
+import functools
 
 translator = Translator()
 translated_subtitles = []
+thread_pool_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
-import multiprocessing
+def tk_after(target):
+ 
+    @functools.wraps(target)
+    def wrapper(self, *args, **kwargs):
+        args = (self,) + args
+        self.after(0, target, *args, **kwargs)
+ 
+    return wrapper
+
+def submit_to_pool_executor(executor):
+    '''Decorates a method to be sumbited to the passed in executor'''
+    def decorator(target):
+ 
+        @functools.wraps(target)
+        def wrapper(*args, **kwargs):
+            result = executor.submit(target, *args, **kwargs)
+            result.add_done_callback(executor_done_call_back)
+            return result
+ 
+        return wrapper
+ 
+    return decorator
+
+def executor_done_call_back(future):
+    exception = future.exception()
+    if exception:
+        raise exception
+ 
 
 def clean_subtitle_text(text):
-        # Remove <i> and </i> tags
         cleaned_text = re.sub(r'<.*?>', '', text)
-        # print("after removed", cleaned_text)
         return cleaned_text
-
+        
 def translate_subtitle(args):
-    subtitle, targetLanguage = args
+    subtitle, targetLanguage, progress_queue = args
     translator = Translator()
     lines = subtitle.strip().split('\n')
     if len(lines) >= 3:
@@ -31,6 +60,8 @@ def translate_subtitle(args):
         cleaned_translated_text = clean_subtitle_text(translated_text)
         encoded_translated_text = cleaned_translated_text.encode('utf-8')
         print(f'Progress => {subtitle_number}.')
+        progress_queue.put(subtitle_number)
+
         return f'{subtitle_number}\n{timestamp}\n{encoded_translated_text.decode()}\n\n'
     else:
         return ''
@@ -41,22 +72,34 @@ class Hero:
         self.fileName = ""
         # self.outputTextEdit = tk.Text()
 
-    def translateSubtitles(self, targetLanguage):
+    def translateSubtitles(self, targetLanguage, progress_var):
         if targetLanguage != "Select Target Language":
             translated_subtitles = []
 
             # Create a pool of worker processes
-            pool = multiprocessing.Pool()
+            # pool = multiprocessing.Pool()
+            tot = len(self.subtitles)
+            cur = 1
+            import queue
+            progress_queue = queue.Queue()
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                futures = [executor.submit(translate_subtitle, (subtitle, targetLanguage, progress_queue)) for subtitle in self.subtitles]
+                while len(translated_subtitles) < len(self.subtitles):
+                    try:
+                        subtitle_number = progress_queue.get(timeout=1)
+                        progress_var.set(int(subtitle_number))
+                    except queue.Empty:
+                        pass
+                for future in concurrent.futures.as_completed(futures):
+                    print(future.result())
+                    cur += 1
+                    translated_subtitles.append(future.result())
 
-            # Map the translate_subtitle function to each subtitle in the list
-            results = pool.map_async(translate_subtitle, [(subtitle, targetLanguage) for subtitle in self.subtitles], chunksize=1)
-
-            # Close the pool of worker processes
-            pool.close()
-            pool.join()
+            # pool.close()
+            # pool.join()
 
             # Append the translated subtitles to the list
-            translated_subtitles.extend(results.get())
+            # translated_subtitles.extend(results.get())
 
             with open('translated_subtitles.srt', 'w', encoding='utf-8') as f:
                 f.writelines(translated_subtitles)
@@ -96,6 +139,8 @@ class SubtitleTranslator:
         self.outputTextEdit = scrolledtext.ScrolledText(root, wrap=tk.WORD, width=40, height=10)
         self.outputTextEdit.grid(row=3, column=0, columnspan=2, padx=10, pady=10)
     
+        self.progress = ttk.Progressbar(root, orient="horizontal", length=200, mode="determinate")
+        self.progress.grid(row=4, column=0, columnspan=2, padx=10, pady=10)
     # def translate_subtitle(self, args):
     #     subtitle, targetLanguage = args
     #     lines = subtitle.strip().split('\n')
@@ -169,54 +214,53 @@ class SubtitleTranslator:
         # print("after removed", cleaned_text)
         return text
 
+    # Seperating blocking code with a child thread 
+    @submit_to_pool_executor(thread_pool_executor)
     def translateSubtitles(self):
         self.extractSubtitles()
         targetLanguage = self.targetLanguageComboBox.get()
         if targetLanguage != "Select Target Language":
-            translator = Translator()
-            translated_subtitles = []
-
-            # Create a pool of worker processes
-
-            # Map the translate_subtitle function to each subtitle in the list
-
-            # Close the pool of worker processes
-            
-            # Append the translated subtitles to the list
-
-        if targetLanguage != "Select Target Language":
-            
-           
-
-            # Create a pool of worker processes
-            # pool = multiprocessing.Pool()
-
-            # # Map the translate_subtitle function to each subtitle in the list
-            # results = pool.map_async(self.translate_subtitle, [(subtitle, targetLanguage) for subtitle in self.subtitles], chunksize=1)
-
-            # # Close the pool of worker processes
-            # pool.close()
-            # pool.join()
-
-            # # Append the translated subtitles to the list
-            # translated_subtitles.extend(results.get())
-
-            # with open('translated_subtitles.srt', 'w', encoding='utf-8') as f:
-            #     f.writelines(translated_subtitles)
-
-            # self.outputTextEdit.insert(tk.END, f'Translated subtitles to {targetLanguage} and saved as translated_subtitles.srt\n')
             import time
             start = time.time()
             bro = Hero()
             bro.fileName = self.fileName
             bro.subtitles = self.subtitles
             bro.subtitle_language = self.subtitleTrackComboBox.get()
-            bro.translateSubtitles(targetLanguage)
+            self.outputTextEdit.insert(tk.END, f'Translating subtitles to {targetLanguage}...\n')
+            # print(idx)
+            # self.outputTextEdit.insert(tk.END, f'Progress => {0} / {len(self.subtitles)}\n')
+            progress_var = tk.DoubleVar()
+            progress_var.set(0)
+            self.progress.config(variable=progress_var, maximum=len(self.subtitles))
+            translated_subtitles = []
+            tot = len(self.subtitles)
+            cur = 1
+            import queue
+            progress_queue = queue.Queue()
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                futures = [executor.submit(translate_subtitle, (subtitle, targetLanguage, progress_queue)) for subtitle in self.subtitles]
+                for future in concurrent.futures.as_completed(futures):
+                    cur += 1
+                    try:
+                        idx = int(future.result().split('\n')[0])
+                        progress_var.set(idx)
+                    except:
+                        pass
+                    translated_subtitles.append(future.result())
+            # pool.join()
+
+            # Append the translated subtitles to the list
+            # translated_subtitles.extend(results.get())
+
+            with open('translated_subtitles.srt', 'w', encoding='utf-8') as f:
+                f.writelines(translated_subtitles)
+
             self.outputTextEdit.insert(tk.END, f'Translated subtitles to {targetLanguage} and saved as translated_subtitles.srt\n')
             end = time.time()
             print("Multi Threading finished in ", end - start)
 
-            
+            #  print(f'Progress => {i + 1} / {len(self.subtitles)}.')
+            #         self.outputTextEdit.insert(tk.END, f'Progress => {i + 1} / {len(self.subtitles)}.\n')
             # for i , subtitle in enumerate(self.subtitles):
             #     lines = subtitle.strip().split('\n')
             #     if len(lines) >= 3:
