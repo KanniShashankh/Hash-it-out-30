@@ -140,24 +140,11 @@ class SubtitleTranslator:
         self.outputTextEdit.grid(row=3, column=0, columnspan=2, padx=10, pady=10)
     
         self.progress = ttk.Progressbar(root, orient="horizontal", length=200, mode="determinate")
-        self.progress.grid(row=4, column=0, columnspan=2, padx=10, pady=10)
-    # def translate_subtitle(self, args):
-    #     subtitle, targetLanguage = args
-    #     lines = subtitle.strip().split('\n')
-    #     if len(lines) >= 3:
-    #         subtitle_number = lines[0]
-    #         timestamp = lines[1]
-    #         subtitle_text = '\n'.join(lines[2:])
-
-    #         cleaned_text = self.clean_subtitle_text(subtitle_text)
-    #         translated = translator.translate(cleaned_text, src='auto', dest=targetLanguage)
-    #         translated_text = translated.text
-
-    #         cleaned_translated_text = self.clean_subtitle_text(translated_text)
-    #         encoded_translated_text = cleaned_translated_text.encode('utf-8')
-    #         return f'{subtitle_number}\n{timestamp}\n{encoded_translated_text.decode()}\n\n'
-    #     else:
-    #         return ''
+        self.progress.grid(row=4, column=0, columnspan=2, padx=10, pady=2)
+        
+        self.progress_label = tk.Label(root, text='0%')
+        self.progress_label.grid(row=5, column=0, columnspan=2, padx=10, pady=2)
+  
 
     def selectFile(self):
         fileName = filedialog.askopenfilename(title="Select Video File")
@@ -227,8 +214,6 @@ class SubtitleTranslator:
             bro.subtitles = self.subtitles
             bro.subtitle_language = self.subtitleTrackComboBox.get()
             self.outputTextEdit.insert(tk.END, f'Translating subtitles to {targetLanguage}...\n')
-            # print(idx)
-            # self.outputTextEdit.insert(tk.END, f'Progress => {0} / {len(self.subtitles)}\n')
             progress_var = tk.DoubleVar()
             progress_var.set(0)
             self.progress.config(variable=progress_var, maximum=len(self.subtitles))
@@ -240,10 +225,12 @@ class SubtitleTranslator:
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 futures = [executor.submit(translate_subtitle, (subtitle, targetLanguage, progress_queue)) for subtitle in self.subtitles]
                 for future in concurrent.futures.as_completed(futures):
-                    cur += 1
                     try:
                         idx = int(future.result().split('\n')[0])
-                        progress_var.set(idx)
+                        if progress_var.get() < idx:
+                            progress_var.set(idx)
+                            percentage = int((self.progress['value'] / self.progress['maximum']) * 100)
+                            self.progress_label.config(text=f'{percentage}%')
                     except:
                         pass
                     translated_subtitles.append(future.result())
