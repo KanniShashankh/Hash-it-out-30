@@ -1,3 +1,2 @@
 *.mkv
-videos
-*.srt
+**/demo.mov
