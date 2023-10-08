@@ -2,7 +2,8 @@
 ### Made using FFMPEG, Python, GoogleTrans, tkinter
 
 # Demo
-![](videos/demo-res.mov)
+https://github.com/KanniShashankh/Hash-it-out-30/assets/63902267/28d5685f-155d-492c-ac4b-841ee190ac54
+
 
 # Screenshots
 ![](photos/window.png)
