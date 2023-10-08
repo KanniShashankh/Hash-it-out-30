@@ -1,2 +1,4 @@
 *.mkv
 **/demo.mov
+.DS_Store
+*.srt

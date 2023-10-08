@@ -239,6 +239,10 @@ class SubtitleTranslator:
             # Append the translated subtitles to the list
             # translated_subtitles.extend(results.get())
 
+            idx = 100
+            progress_var.set(len(self.subtitles))
+            self.progress_label.config(text=f'{idx}%')
+
             with open('translated_subtitles.srt', 'w', encoding='utf-8') as f:
                 f.writelines(translated_subtitles)
 
